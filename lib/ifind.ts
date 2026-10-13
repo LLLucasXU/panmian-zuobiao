@@ -8,26 +8,11 @@ export interface MarketEvent {
   url: string;
 }
 
-const ENDPOINT = "https://api-mcp.51ifind.com:8643/ds-mcp-servers/hexin-ifind-ds-news-mcp";
+const ENDPOINT = "https://mcp.51ifind.com/ds-mcp-servers/hexin-ifind-ds-news-mcp";
 const SOURCE: Source = { provider: "iFinD MCP", endpoint: "search_news", url: "https://mcp.51ifind.com/" };
 
 function dateString(ms: number) {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(ms);
-}
-
-function verifiedSnapshot(reason: string): Slice<MarketEvent[]> | null {
-  try {
-    const snapshot = JSON.parse(process.env.IFIND_EVENT_SNAPSHOT_JSON || "[]") as MarketEvent[];
-    const events = snapshot.filter(item => item && /^https?:\/\//.test(item.url) && /^\d{4}-\d{2}-\d{2}$/.test(item.date));
-    const newest = events.map(item => Date.parse(`${item.date}T12:00:00+08:00`)).sort((a, b) => b - a)[0];
-    if (!events.length || !newest || Date.now() - newest >= 7 * 86_400_000) return null;
-    return {
-      value: events, timestamp: newest,
-      source: { provider: "iFinD MCP · 已验证快照", endpoint: "search_news", url: SOURCE.url },
-      error: `${reason}；展示截至 ${dateString(newest)} 已验证的真实资讯快照。`,
-      coverage: 1
-    };
-  } catch { return null; }
 }
 
 async function mcpPost(token: string, payload: object, session?: string) {
@@ -48,9 +33,6 @@ async function mcpPost(token: string, payload: object, session?: string) {
 }
 
 export async function loadEvents(token: string | undefined, tradingDate?: number): Promise<Slice<MarketEvent[]>> {
-  if (process.env.IFIND_EVENT_SNAPSHOT_JSON) {
-    return verifiedSnapshot("当前托管环境无法实时连接 iFinD MCP") || { source: SOURCE, error: "iFinD 真实资讯快照已过期或不可用。" };
-  }
   if (!token) return { source: SOURCE, error: "iFinD MCP 密钥未配置。" };
   const end = tradingDate || Date.now();
   const start = end - 7 * 86_400_000;
@@ -63,7 +45,7 @@ export async function loadEvents(token: string | undefined, tradingDate?: number
     await mcpPost(token, { jsonrpc: "2.0", method: "notifications/initialized" }, init.session);
     const call = await mcpPost(token, {
       jsonrpc: "2.0", id: 2, method: "tools/call",
-      params: { name: "search_news", arguments: { query: "A股市场 宏观政策 流动性", time_start: dateString(start), time_end: dateString(end), size: 3 } }
+      params: { name: "search_news", arguments: { query: "A股市场", time_start: dateString(start), time_end: dateString(end), size: 5 } }
     }, init.session);
     if (call.data.error || call.data.result?.isError) throw new Error("iFinD 新闻检索失败");
     const text = call.data.result?.content?.find((item: { type?: string }) => item.type === "text")?.text;
@@ -79,11 +61,14 @@ export async function loadEvents(token: string | undefined, tradingDate?: number
         date: String(item["日期"] || ""),
         url: String(item["URL"])
       }))
-      .filter(item => /^https?:\/\//.test(item.url) && /^\d{4}-\d{2}-\d{2}$/.test(item.date));
+      .filter(item => /^https?:\/\//.test(item.url) && /^\d{4}-\d{2}-\d{2}$/.test(item.date) && item.date >= dateString(start) && item.date <= dateString(end))
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .filter((item, index, all) => all.findIndex(other => other.url === item.url) === index)
+      .slice(0, 3);
     if (!events.length) return { source: SOURCE, error: "iFinD 未检索到可核对日期与链接的资讯。" };
     return { value: events, timestamp: Date.parse(`${events[0].date}T12:00:00+08:00`), source: SOURCE, coverage: 1 };
   } catch (error) {
     const reason = error instanceof Error ? error.message : "iFinD 事件取数失败";
-    return verifiedSnapshot(`iFinD 实时连接失败（${reason}）`) || { source: SOURCE, error: reason };
+    return { source: SOURCE, error: `iFinD 实时检索失败：${reason}` };
   }
 }

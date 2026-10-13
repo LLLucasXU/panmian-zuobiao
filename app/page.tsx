@@ -40,7 +40,12 @@ export default function Home() {
 
   useEffect(() => { fetch("/api/health").then(r => r.json()).then(value => setHealth(value as Health)).catch(() => setHealth(null)); }, []);
   useEffect(() => { if (selectedEvidence) drawerClose.current?.focus(); else drawerOpener.current?.focus(); }, [selectedEvidence]);
-  useEffect(() => { if (report) document.getElementById("report")?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [report]);
+  useEffect(() => {
+    if (!report) return;
+    const target = document.getElementById(report.followUpAnswer ? "follow-up-answer" : "report");
+    target?.scrollIntoView({ behavior: report.followUpAnswer ? "auto" : "smooth", block: "start" });
+    if (report.followUpAnswer) target?.focus({ preventScroll: true });
+  }, [report]);
   useEffect(() => {
     const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setSelectedEvidence(null); };
     window.addEventListener("keydown", escape);
@@ -101,7 +106,15 @@ export default function Home() {
           <aside className="quality-card"><p className="eyebrow">证据质量 / COVERAGE</p><div className="quality-number"><strong>{report.evidence.filter(x => x.quality === "valid").length}</strong><span>条已核验证据</span></div><div className="quality-rule"></div><ul>{report.confidenceReasons.map((x, i) => <li key={i}>{x}</li>)}</ul><div className="quality-warning"><strong>当前边界</strong><p>{report.warnings.length ? report.warnings.slice(0, 3).join("；") : "所有计划维度均已取得数据。"}</p></div><span className="small-note">AI 解释：{report.explanationMode === "model" ? "模型生成并通过引用校验" : "确定性模板（模型未接通或未通过校验）"}</span></aside></div>
         <div className="conditions"><div><p className="eyebrow">重新评估的条件</p><h3>什么变化会改变这张卡？</h3></div><div>{report.switchConditions.map((x, i) => <p key={i}>{x.text}</p>)}</div></div>
         <section className="evidence-section" aria-labelledby="evidence-title"><div className="section-header"><div><p className="eyebrow">04 / 原始依据</p><h2 id="evidence-title">逐条核对证据</h2></div><span className="small-note">点击卡片查看字段、单位、计算式与来源</span></div><div className="evidence-grid">{DIMENSIONS.map(d => { const items = report.evidence.filter(x => x.dimension === d); const hasValid = items.some(x => x.quality === "valid"); return <div className="dimension-card" key={d}><div className="dimension-heading"><h3>{DIMENSION_LABELS[d]}</h3><span className={`dimension-status ${items.length ? hasValid ? "good" : "partial" : "missing"}`}>{items.length ? hasValid ? "已取得" : "部分覆盖" : "未覆盖"}</span></div>{items.length ? items.map(item => <button type="button" className="evidence-link" onClick={() => openEvidence(item.id)} key={item.id}><span>{item.statement}</span><small>{formatDate(item.observedAt)} · {QUALITY[item.quality]}</small><span aria-hidden="true" className="arrow">↗</span></button>) : <p className="empty-evidence">{report.warnings.find(x => x.startsWith(DIMENSION_LABELS[d])) || "本次没有可核验数据。"}</p>}</div>; })}</div></section>
-        <section className="followup-section" aria-labelledby="followup-title"><div><p className="eyebrow">05 / 继续研究</p><h2 id="followup-title">沿着证据继续问</h2><p>追问会重新执行服务端研究；不会把网页传回的证据当作真实来源。</p></div><div className="followup-content"><div className="followup-suggestions">{report.followUps.map((x, i) => <button type="button" key={i} className="suggestion" onClick={() => setFollowUp(x)}>{x}<span aria-hidden="true">↗</span></button>)}</div><form onSubmit={e => { e.preventDefault(); if (followUp.trim()) runResearch(followUp, true); }}><label htmlFor="follow-up-input">你还想研究什么？</label><div className="followup-input-row"><input id="follow-up-input" value={followUp} onChange={e => setFollowUp(e.target.value)} maxLength={200} placeholder="输入一个可核验的问题" /><button className="button-primary" disabled={busy || !followUp.trim()} type="submit">继续研究</button></div></form></div></section>
+        <section className="followup-section" aria-labelledby="followup-title">
+          <div><p className="eyebrow">05 / 继续研究</p><h2 id="followup-title">沿着证据继续问</h2><p>追问会重新执行服务端研究；不会把网页传回的证据当作真实来源。</p></div>
+          <div className="followup-content">
+            <div className="followup-suggestions">{report.followUps.map((x, i) => <button type="button" key={i} className="suggestion" onClick={() => setFollowUp(x)}>{x}<span aria-hidden="true">↗</span></button>)}</div>
+            <form onSubmit={e => { e.preventDefault(); if (followUp.trim()) runResearch(followUp, true); }}><label htmlFor="follow-up-input">你还想研究什么？</label><div className="followup-input-row"><input id="follow-up-input" value={followUp} onChange={e => setFollowUp(e.target.value)} maxLength={200} placeholder="输入一个可核验的问题" /><button className="button-primary" disabled={busy || !followUp.trim()} type="submit">{busy ? step : "继续研究"}</button></div></form>
+            {error && <div role="alert" className="error-box"><strong>追问未完成</strong><p>{error}</p></div>}
+            {report.followUpAnswer && <article id="follow-up-answer" className="followup-answer" tabIndex={-1} aria-live="polite"><span className="eyebrow">本轮追问 · {report.followUpAnswer.limited ? "证据有限" : "有据可查"}</span><h3>{report.followUpAnswer.question}</h3><p>{report.followUpAnswer.text}</p><div className="references">{report.followUpAnswer.evidenceIds.map(id => <button type="button" key={id} onClick={() => openEvidence(id)} className="reference">查看证据 {id} ↗</button>)}</div><small>已重新核对本轮数据；回答只使用页面中的证据。</small></article>}
+          </div>
+        </section>
       </section>}
     </div>
     <footer><div className="container footer-inner"><strong>盘面坐标</strong><p>只分析已取得的证据。产品不提供确定性涨跌预测、收益承诺、仓位或直接买卖建议。</p><span>研究原型 · 数据以页面标注的来源与时点为准</span></div></footer>

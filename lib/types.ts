@@ -34,6 +34,7 @@ export interface Evidence {
 }
 
 export interface Claim { text: string; evidenceIds: string[] }
+export interface FollowUpAnswer { question: string; text: string; evidenceIds: string[]; limited: boolean }
 export interface Report {
   id: string;
   input: ResearchInput;
@@ -54,6 +55,7 @@ export interface Report {
   generatedAt: string;
   explanationMode: "model" | "template";
   followUps: string[];
+  followUpAnswer?: FollowUpAnswer;
 }
 
 export const DIMENSIONS: Dimension[] = ["structure", "breadth", "style", "valuation", "liquidity", "sentiment", "event"];

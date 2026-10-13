@@ -1,4 +1,22 @@
-import { POST as research } from "../research/route";
+import { NextResponse } from "next/server";
+import { getLiveData } from "@/lib/data";
+import { enhanceReport } from "@/lib/explain";
+import { answerFollowUp } from "@/lib/follow-up";
+import { parseInput, InputError } from "@/lib/input";
+import { buildReport } from "@/lib/research";
 
-// Each follow-up performs a fresh server-side research run. Client-supplied evidence is not trusted.
-export const POST = research;
+export const maxDuration = 60;
+
+export async function POST(request: Request) {
+  try {
+    const input = parseInput(await request.json());
+    const key = process.env.FUYAO_API_KEY;
+    if (!key) return NextResponse.json({ error: "真实金融数据未配置：服务端缺少 FUYAO_API_KEY。" }, { status: 503 });
+    const data = await getLiveData(input, key);
+    const report = await enhanceReport(buildReport(input, data));
+    return NextResponse.json({ ...report, followUpAnswer: answerFollowUp(input.question, report) }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    const status = error instanceof InputError ? error.status : 500;
+    return NextResponse.json({ error: error instanceof Error ? error.message : "追问失败" }, { status });
+  }
+}

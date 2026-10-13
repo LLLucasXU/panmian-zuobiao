@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { MarketData } from "../lib/data";
 import { InputError, parseInput } from "../lib/input";
+import { answerFollowUp } from "../lib/follow-up";
 import { buildReport, decideState, isStale, median, percentChange } from "../lib/research";
 import { DIMENSIONS, type ResearchInput } from "../lib/types";
 
@@ -55,4 +56,20 @@ test("stale market slices cannot produce a current-state label", () => {
   const report = buildReport(input, data);
   assert.equal(report.state, "insufficient");
   assert.equal(report.evidence.find(x => x.id === "structure.change20")?.quality, "stale");
+});
+
+test("follow-up gives a visible, evidence-linked answer to a suggested question", () => {
+  const report = buildReport(input, fixture());
+  const answer = answerFollowUp("风格指数之间的分化有多大？", report);
+  assert.match(answer.text, /百分点/);
+  assert.deepEqual(answer.evidenceIds, ["style.spread20"]);
+  assert.equal(answer.limited, true); // The fixture has only two comparable indexes.
+});
+
+test("follow-up states its limit when a requested dimension is unavailable", () => {
+  const report = buildReport(input, fixture());
+  const answer = answerFollowUp("最近的政策事件有哪些？", report);
+  assert.equal(answer.limited, true);
+  assert.match(answer.text, /没有足够的事件资讯证据/);
+  assert.deepEqual(answer.evidenceIds, []);
 });

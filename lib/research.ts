@@ -172,6 +172,6 @@ export function buildReport(input: ResearchInput, data: MarketData): Report {
     id: crypto.randomUUID(), input, dataMode: input.mode, dataStatus, state, stateLabel: STATE_LABEL[state], confidence,
     confidenceReasons, facts, syntheses, uncertainties, contradictions, switchConditions,
     missingDimensions, evidence, warnings, generatedAt: now, explanationMode: "template",
-    followUps: ["风格指数之间的分化有多大？", "哪些数据缺失可能改变当前判断？", "成交额变化与指数方向是否一致？", "只比较有同口径数据的历史区间"]
+    followUps: ["风格指数之间的分化有多大？", "哪些数据缺失可能改变当前判断？", "成交额变化与指数方向是否一致？", "什么变化会改变当前市场状态？"]
   };
 }
